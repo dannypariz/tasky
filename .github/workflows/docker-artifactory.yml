@@ -1,0 +1,35 @@
+name: Build and Push Docker Image to Artifactory
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+env:
+  REGISTRY: solengeu.jfrog.io
+  REPO: tasky-docker-local
+  IMAGE_NAME: tasky
+  IMAGE_TAG: latest
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Log in to JFrog Artifactory Docker registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.JFROG_USERNAME }}
+          password: ${{ secrets.JFROG_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG .
+
+      - name: Push Docker image to Artifactory
+        run: |
+          docker push $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG
