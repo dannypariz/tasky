@@ -1,9 +1,5 @@
 name: Build and Push Docker Image to Artifactory
 
-on:
-  push:
-    branches: ['main']
-
 env:
   REGISTRY: solengeu.jfrog.io
   REPO: tasky-docker-local
