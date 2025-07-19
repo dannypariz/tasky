@@ -1,10 +1,5 @@
 name: Build to Artifactory
 
-on:
-  push:
-    branches: ['main']
-  workflow_dispatch:
-
 env:
   JF_URL: https://solengeu.jfrog.io
   JF_BUILD_NAME: tasky-build
