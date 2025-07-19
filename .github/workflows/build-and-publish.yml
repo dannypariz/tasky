@@ -3,51 +3,56 @@ name: Build and Push Docker Image to Artifactory
 on:
   push:
     branches: ['main']
-  workflow_dispatch:
 
 env:
-  JF_URL: https://solengeu.jfrog.io
-  JF_BUILD_NAME: tasky-build
-  JF_BUILD_NUMBER: ${{ github.run_number }}
   REGISTRY: solengeu.jfrog.io
   REPO: tasky-docker-local
   IMAGE_NAME: tasky
   IMAGE_TAG: latest
+  BUILD_NAME: tasky-build
+  BUILD_NUMBER: ${{ github.run_number }}
 
 jobs:
-  build-and-push-image:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Install and configure JFrog CLI
-        run: |
-          curl -fL https://install-cli.jfrog.io | sh
-          jf config add my-server \
-            --url $JF_URL \
-            --user ${{ secrets.JFROG_USERNAME }} \
-            --password ${{ secrets.JFROG_TOKEN }} \
-            --interactive=false
+      - name: Set up JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v3
+        with:
+          url: ${{ secrets.JFROG_URL }}
+          username: ${{ secrets.JFROG_USERNAME }}
+          password: ${{ secrets.JFROG_PASSWORD }}
 
-      - name: Collect environment variables for build-info
+      - name: Configure JFrog CLI for docker
         run: |
-          jf rt bce $JF_BUILD_NAME $JF_BUILD_NUMBER
+          jf docker-config --repo-resolve=${{ env.REPO }} --repo-deploy=${{ env.REPO }}
 
-      - name: Build Docker image using JFrog CLI
+      - name: Build and push image with JFrog CLI
         run: |
-          jf docker build $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG \
-            --build-name=$JF_BUILD_NAME \
-            --build-number=$JF_BUILD_NUMBER \
-            .
-
-      - name: Push Docker image to Artifactory using JFrog CLI
-        run: |
+          docker build -t $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG .
           jf docker push $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG \
-            --build-name=$JF_BUILD_NAME \
-            --build-number=$JF_BUILD_NUMBER
+            --build-name=${{ env.BUILD_NAME }} \
+            --build-number=${{ env.BUILD_NUMBER }}
 
-      - name: Publish build-info to Artifactory
+      - name: Collect environment and Git data
         run: |
-          jf rt bp $JF_BUILD_NAME $JF_BUILD_NUMBER
+          jf rt bce $BUILD_NAME $BUILD_NUMBER
+          jf rt bag $BUILD_NAME $BUILD_NUMBER
+
+      - name: Publish Build Info
+        run: |
+          jf rt bp $BUILD_NAME $BUILD_NUMBER
+
+      - name: Run Xray Scan
+        run: |
+          jf xr scan --build=$BUILD_NAME/$BUILD_NUMBER \
+          --output=json > xray-results.json || true
+
+      - name: Add scan results to GitHub Summary
+        run: |
+          echo "### Xray Scan Summary" >> $GITHUB_STEP_SUMMARY
+          cat xray-results.json | jq -r '.summary | to_entries[] | "- \(.key): \(.value)"' >> $GITHUB_STEP_SUMMARY
