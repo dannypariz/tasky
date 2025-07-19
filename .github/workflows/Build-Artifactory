@@ -1,0 +1,55 @@
+name: Build to Artifactory
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+env:
+  JF_URL: https://solengeu.jfrog.io
+  JF_BUILD_NAME: tasky-build
+  JF_BUILD_NUMBER: ${{ github.run_number }}
+  REGISTRY: solengeu.jfrog.io
+  REPO: tasky-docker-local
+  IMAGE_NAME: tasky
+  IMAGE_TAG: latest
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install JFrog CLI
+        run: |
+          curl -fL https://install-cli.jfrog.io | sh
+          jf config add my-server \
+            --url $JF_URL \
+            --user ${{ secrets.JFROG_USERNAME }} \
+            --password ${{ secrets.JFROG_TOKEN }} \
+            --interactive=false
+
+      - name: Collect environment variables
+        run: |
+          jf rt bce $JF_BUILD_NAME $JF_BUILD_NUMBER
+
+      - name: Build Docker image with JFrog CLI
+        run: |
+          jf docker build \
+            $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG \
+            --build-name=$JF_BUILD_NAME \
+            --build-number=$JF_BUILD_NUMBER \
+            .
+
+      - name: Push Docker image to Artifactory with JFrog CLI
+        run: |
+          jf docker push \
+            $REGISTRY/$REPO/$IMAGE_NAME:$IMAGE_TAG \
+            --build-name=$JF_BUILD_NAME \
+            --build-number=$JF_BUILD_NUMBER
+
+      - name: Publish build-info to Artifactory
+        run: |
+          jf rt bp $JF_BUILD_NAME $JF_BUILD_NUMBER
